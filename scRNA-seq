@@ -1,3 +1,252 @@
-python
+### python
+
+import numpy as np
+import pandas as pd
+import scanpy as sc
+import anndata as ad
+import seaborn as sns
+import celltypist
+import matplotlib.pyplot as plt
+import scanpy.external as sce
+import infercnvpy as cnv
+from scipy import sparse
+from celltypist import models
+import os
+
+sc.settings.verbosity = 3   
+sc.logging.print_header()
+sc.settings.set_figure_params(dpi=300,dpi_save=600,facecolor='white')
+
+adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
+
+### Figure 3A
+### python
+sc.pl.umap(adata, color = ['Cell_types_0'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
+sc.pl.umap(adata, color = ['patient_ID'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
+sc.pl.umap(adata, color = ['Tissues'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
+
+### Figure 3B
+### python
+marker_genes_dict1 = {
+    'T cells':['CD3D','CD3E'],
+    'B cells':['MS4A1','CD79B'],
+    'Plasma cells':['IGHG1','MZB1'],
+    'Malignant cells':['EPCAM','KRT17'],
+    'Macrophages':['CD68','CD163'],
+    'DC':['FCER1A','CD1C'],
+    'pDC':['LILRA4','IRF7'],
+    'Mast cells':['KIT','CPA3'],
+    'Fibroblasts':['COL1A2','FGF7'],
+    'Endothelial cells':['PECAM1','VWF'],
+}
+adata.layers['scaled'] = sc.pp.scale(adata, copy=True).X
+sc.pl.matrixplot(adata, marker_genes_dict1, 'Cell_types_0', dendrogram=True,colorbar_title='mean z-score', layer='scaled', vmin=-2, vmax=2, cmap='RdBu_r',save='.pdf')
+
+### Figure 3C
+### python
+adata.obs.to_csv('Tissues_all_cells_obs.csv')
+### R
+library(ggplot2)
+library(reshape2)
+df <- read.csv('Tissues_all_cells_obs.csv')
+df1 <- table(df$Tissues,df$Cell_types_0)
+freq.table <-prop.table(x=df1,margin=2)
+tr <- melt(freq.table)
+colnames(tr) <- c("Tissues","Cell_types_0","fraction")
+tr$Cell_types_0=as.character(tr$Cell_types_0)
+tr$Cell_types_0=factor(tr$Cell_types_0,levels = c('Fibroblasts','Endothelial cells','Malignant cells','Macrophages','DC','Plasma cells','Mast cells','pDC','B cells','T cells'))
+
+p <- ggplot(tr,aes(x=Cell_types_0,y=fraction,fill=Tissues))+geom_bar(stat="identity",width=0.9)+theme_classic()
+p1 <- p+ylab ('Fraction of Cells')+scale_y_continuous(expand=c(0,0))+theme (axis.ticks.x = element_blank())
+p1+coord_flip()
+
+b=factor(df$Cell_types_0,levels = c('Fibroblasts','Endothelial cells','Malignant cells','Macrophages','DC','Plasma cells','Mast cells','pDC','B cells','T cells'))
+pp <- ggplot(df,aes(x=b))+geom_bar(width=0.9,fill = "steelblue", color ="steelblue")
+pp + theme_minimal()+coord_flip()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Figure S4
+### python
+sc.pl.umap(adata, color = ['Cell_types_0'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
+sc.pl.umap(adata, color = ['patient_ID'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
+sc.pl.umap(adata, color = ['Tissues'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
+
+sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['Cell_types_0'],legend_fontsize=8,size = 2,title='nLNs',legend_fontoutline=1,frameon=False)
+sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['Cell_types_0'],legend_fontsize=8,size = 2,title='mLNs',legend_fontoutline=1,frameon=False)
+sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['Cell_types_0'],legend_fontsize=8,size = 2,title='Primary tumor',legend_fontoutline=1,frameon=False)
+
+sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['patient_ID'],legend_fontsize=8,size = 2,title='nLNs',legend_fontoutline=1,frameon=False)
+sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['patient_ID'],legend_fontsize=8,size = 2,title='mLNs',legend_fontoutline=1,frameon=False)
+sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['patient_ID'],legend_fontsize=8,size = 2,title='Primary tumor',legend_fontoutline=1,frameon=False)
+
+sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['Tissues'],legend_fontsize=8,size = 2,title='nLNs',legend_fontoutline=1,frameon=False)
+sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['Tissues'],legend_fontsize=8,size = 2,title='mLNs',legend_fontoutline=1,frameon=False)
+sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['Tissues'],legend_fontsize=8,size = 2,title='Primary tumor',legend_fontoutline=1,frameon=False)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
