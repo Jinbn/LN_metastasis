@@ -227,11 +227,22 @@ cellchat.tumor <- updateCellChat(cellchat.tumor)
 cellchat.LN_pos <- updateCellChat(cellchat.LN_pos)
 cellchat.LN_neg <- updateCellChat(cellchat.LN_neg)
 
+group.new = levels(cellchat.LN_pos@idents)
+cellchat.LN_neg <- liftCellChat(cellchat.LN_neg, group.new)
+object.list <- list(LN_neg = cellchat.LN_neg, LN_pos = cellchat.LN_pos,tumor = cellchat.tumor)
+cellchat <- mergeCellChat(object.list, add.names = names(object.list), cell.prefix = TRUE)
+cellchat
+### Figure S6A
+gg1 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3),group.levels = c(1,2,3))+coord_cartesian(ylim = c(0, 3000))
+gg2 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3),group.levels = c(1,2,3), measure = "weight")
+gg1 + gg2
 
-
-
-
-
+gg1 <- netVisual_heatmap(cellchat)
+#> Do heatmap based on a merged object
+gg2 <- netVisual_heatmap(cellchat,comparison = c(3, 2) ,measure = "weight")
+#> Do heatmap based on a merged object
+gg1 + gg2
+gg2
 
 
 
