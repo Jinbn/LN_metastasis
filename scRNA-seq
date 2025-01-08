@@ -105,11 +105,11 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['Cell_types'],legend_fontsize=8,size = 30,title='Metastatic lymph nodes',legend_fontoutline=1)
     sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['Cell_types'],legend_fontsize=8,size = 30,title='Primary tumor',legend_fontoutline=1)
     
-    adata.obs.to_csv('Pt_5patients_CD8_obs.csv')
+    adata.obs.to_csv('Pt_CD8_obs.csv')
     ### R
     library(ggplot2)
     library(reshape2)
-    df <- read.csv('Pt_5patients_CD8_obs.csv')
+    df <- read.csv('Pt_CD8_obs.csv')
     df1 <- table(df$Cell_types,df$Tissues)
     freq.table <-prop.table(x=df1,margin=2)
     tr <- melt(freq.table)
