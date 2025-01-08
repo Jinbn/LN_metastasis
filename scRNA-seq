@@ -138,161 +138,220 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
                  order = ["Non-metastatic lymph nodes", "Metastatic lymph nodes", "Primary tumor"],stripplot=False, inner='box',rotation=90,save='.pdf')
 
 
-### Figure 4A
-### python
-results_file1 = '5patients_LN_neg_RNA.h5ad'
-results_file2 = '5patients_LN_pos_RNA.h5ad'
-results_file3 = '5patients_primary_tumor_RNA.h5ad'
-
-adata1 = adata[adata.obs.Tissues.isin(['Non-metastatic lymph nodes'])].copy()
-adata2 = adata[adata.obs.Tissues.isin(['Metastatic lymph nodes'])].copy()
-adata3 = adata[adata.obs.Tissues.isin(['Primary tumor'])].copy()
-
-adata1.write(results_file1, compression="gzip")
-adata2.write(results_file2, compression="gzip")
-adata3.write(results_file3, compression="gzip")
-
-### R
-library(dplyr)
-library(patchwork)
-library(ggplot2)
-library(igraph)
-library(svglite)
-library(ggalluvial)
-library(NMF)
-library(Seurat)
-library(CellChat)
-library(ComplexHeatmap)
-library(scRUtils)
-library(wordcloud)
-library(reticulate)
-library(Matrix)
-library(methods)
-library(circlize)
-library(viridis)
-
-options(stringsAsFactors = FALSE)
-setAs("dgRMatrix", to = "dgCMatrix", function(from){as(as(from, "CsparseMatrix"), "dgCMatrix")})
-ad <- import("anndata", convert = FALSE)
-sample_names <- c("5patients_primary_tumor_RNA.h5ad", "5patients_LN_pos_RNA.h5ad", "5patients_LN_neg_RNA.h5ad")
-
-for (sample_name in sample_names) 
-{
-  ad_object <- ad$read_h5ad(sample_name)
-  data.input <- t(py_to_r(ad_object$X))
-  rownames(data.input) <- rownames(py_to_r(ad_object$var))
-  colnames(data.input) <- rownames(py_to_r(ad_object$obs))
-  meta.data <- py_to_r(ad_object$obs)
-  meta <- meta.data
-  cellchat <- createCellChat(object = as(data.input, "dgCMatrix"), meta = meta, group.by = "Cell_types_0")
-  CellChatDB <- CellChatDB.human
-  showDatabaseCategory(CellChatDB)
-  dplyr::glimpse(CellChatDB$interaction)
-  CellChatDB.use <- CellChatDB
-  cellchat@DB <- CellChatDB.use
-
-  cellchat <- subsetData(cellchat)
-  future::plan("multiprocess", workers = 4)
-  cellchat <- identifyOverExpressedGenes(cellchat)
-  cellchat <- identifyOverExpressedInteractions(cellchat)
-  cellchat <- projectData(cellchat, PPI.human)
-
-  options(future.globals.maxSize= 1000*1024^2)
-  cellchat <- computeCommunProb(cellchat)
-  cellchat <- filterCommunication(cellchat, min.cells = 10)
-  cellchat <- computeCommunProbPathway(cellchat)
-  cellchat <- aggregateNet(cellchat)
-  
-  cellchat <- netAnalysis_computeCentrality(cellchat, slot.name = "netP") 
-  gg1 <- netAnalysis_signalingRole_scatter(cellchat)
-  ht1 <- netAnalysis_signalingRole_heatmap(cellchat, pattern = "outgoing")
-  ht2 <- netAnalysis_signalingRole_heatmap(cellchat, pattern = "incoming")
-  ht1 + ht2
- 
-  cellchat <- computeNetSimilarity(cellchat, type = "functional")
-  cellchat <- netEmbedding(cellchat, type = "functional")
-  cellchat <- netClustering(cellchat, type = "functional")
-  netVisual_embedding(cellchat, type = "functional", label.size = 3.5)
-
-  sample_name <- gsub("\\.h5ad$", "", sample_name)
-  file_name <- paste0(sample_name, "_cellchat.rds")
-  saveRDS(cellchat, file = file_name)
-  cat(paste("Saved ", sample_name, " to ", file_name, "\n"))
-}
-
-cellchat.tumor <- readRDS("5patients_primary_tumor_RNA_cellchat.rds")
-cellchat.LN_pos <- readRDS("5patients_LN_pos_RNA_cellchat.rds")
-cellchat.LN_neg <- readRDS("5patients_LN_neg_RNA_cellchat.rds")
-cellchat.tumor <- updateCellChat(cellchat.tumor)
-cellchat.LN_pos <- updateCellChat(cellchat.LN_pos)
-cellchat.LN_neg <- updateCellChat(cellchat.LN_neg)
-
-group.new = levels(cellchat.LN_pos@idents)
-cellchat.LN_neg <- liftCellChat(cellchat.LN_neg, group.new)
-object.list <- list(LN_neg = cellchat.LN_neg, LN_pos = cellchat.LN_pos,tumor = cellchat.tumor)
-cellchat <- mergeCellChat(object.list, add.names = names(object.list), cell.prefix = TRUE)
-cellchat
-
-### Figure S6A
-gg1 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3),group.levels = c(1,2,3))+coord_cartesian(ylim = c(0, 3000))
-gg2 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3),group.levels = c(1,2,3), measure = "weight")
-gg1 + gg2
-
-### Figure 4B
-gg1 <- netVisual_heatmap(cellchat)
-gg2 <- netVisual_heatmap(cellchat,comparison = c(3, 2) ,measure = "weight")
-gg2
-
-### Figure 4A
-num.link <- sapply(object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
-weight.MinMax <- c(min(num.link), max(num.link)) # control the dot size in the different datasets
-gg <- list()
-for (i in 1:length(object.list)) {
-  gg[[i]] <- netAnalysis_signalingRole_scatter(object.list[[i]], title = names(object.list)[i], weight.MinMax = weight.MinMax) +
-    coord_cartesian(xlim = c(0, 12),ylim = c(0, 10))
-}
-patchwork::wrap_plots(plots = gg)
-
-### Figure S6B
-gg1 <- rankNet(cellchat, mode = "comparison", comparison = c(2,3),stacked = T, do.stat = TRUE)
-gg2 <- rankNet(cellchat, mode = "comparison", comparison = c(2,3),stacked = F, do.stat = TRUE)
-gg1 + gg2
-### Figure S6C
-gg1 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1),stacked = T, do.stat = TRUE)
-gg2 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1),stacked = F, do.stat = TRUE)
-gg1 + gg2
-### Figure S6D
-gg1 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1,3),stacked = T, do.stat = TRUE)
-gg2 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1,3),stacked = F, do.stat = TRUE)
-gg1 + gg2
-
-### Figure 4C
-pathways.show <- c("SPP1") 
-par(mfrow = c(1,2), xpd=TRUE)
-ht <- list()
-for (i in 1:length(object.list)) {
-  ht[[i]] <- netVisual_heatmap(object.list[[i]], signaling = pathways.show, color.heatmap = "Reds",title.name = paste(pathways.show, "signaling ",names(object.list)[i]) + netVis_heatmap(object.list[[i]],heatmap_colors_max = 0.16))
-}
-
-ComplexHeatmap::draw(ht[[1]] +ht[[2]] + ht[[3]], ht_gap = unit(0.5, "cm"))
-
-### Figure S6E
-cellchat <- readRDS('5patients_primary_tumor_RNA_cellchat.rds')
-pathways.show <- c("SPP1")
-netVisual_bubble(cellchat, sources.use = 5, targets.use = 6, signaling = c("SPP1"), remove.isolate = FALSE)
-
-### Figure S6F
-cellchat <- readRDS('5patients_LN_pos_RNA_cellchat.rds')
-pathways.show <- c("SPP1")
-netVisual_bubble(cellchat, sources.use = 5, targets.use = 4, signaling = c("SPP1"), remove.isolate = FALSE)
-
-
+### Figure 4A-C and Figure S6
+    ### python
+    results_file1 = '5patients_LN_neg_RNA.h5ad'
+    results_file2 = '5patients_LN_pos_RNA.h5ad'
+    results_file3 = '5patients_primary_tumor_RNA.h5ad'
+    
+    adata1 = adata[adata.obs.Tissues.isin(['Non-metastatic lymph nodes'])].copy()
+    adata2 = adata[adata.obs.Tissues.isin(['Metastatic lymph nodes'])].copy()
+    adata3 = adata[adata.obs.Tissues.isin(['Primary tumor'])].copy()
+    
+    adata1.write(results_file1, compression="gzip")
+    adata2.write(results_file2, compression="gzip")
+    adata3.write(results_file3, compression="gzip")
+    
+    ### R
+    library(dplyr)
+    library(patchwork)
+    library(ggplot2)
+    library(igraph)
+    library(svglite)
+    library(ggalluvial)
+    library(NMF)
+    library(Seurat)
+    library(CellChat)
+    library(ComplexHeatmap)
+    library(scRUtils)
+    library(wordcloud)
+    library(reticulate)
+    library(Matrix)
+    library(methods)
+    library(circlize)
+    library(viridis)
+    
+    options(stringsAsFactors = FALSE)
+    setAs("dgRMatrix", to = "dgCMatrix", function(from){as(as(from, "CsparseMatrix"), "dgCMatrix")})
+    ad <- import("anndata", convert = FALSE)
+    sample_names <- c("5patients_primary_tumor_RNA.h5ad", "5patients_LN_pos_RNA.h5ad", "5patients_LN_neg_RNA.h5ad")
+    
+    for (sample_name in sample_names) 
+    {
+      ad_object <- ad$read_h5ad(sample_name)
+      data.input <- t(py_to_r(ad_object$X))
+      rownames(data.input) <- rownames(py_to_r(ad_object$var))
+      colnames(data.input) <- rownames(py_to_r(ad_object$obs))
+      meta.data <- py_to_r(ad_object$obs)
+      meta <- meta.data
+      cellchat <- createCellChat(object = as(data.input, "dgCMatrix"), meta = meta, group.by = "Cell_types_0")
+      CellChatDB <- CellChatDB.human
+      showDatabaseCategory(CellChatDB)
+      dplyr::glimpse(CellChatDB$interaction)
+      CellChatDB.use <- CellChatDB
+      cellchat@DB <- CellChatDB.use
+    
+      cellchat <- subsetData(cellchat)
+      future::plan("multiprocess", workers = 4)
+      cellchat <- identifyOverExpressedGenes(cellchat)
+      cellchat <- identifyOverExpressedInteractions(cellchat)
+      cellchat <- projectData(cellchat, PPI.human)
+    
+      options(future.globals.maxSize= 1000*1024^2)
+      cellchat <- computeCommunProb(cellchat)
+      cellchat <- filterCommunication(cellchat, min.cells = 10)
+      cellchat <- computeCommunProbPathway(cellchat)
+      cellchat <- aggregateNet(cellchat)
+      
+      cellchat <- netAnalysis_computeCentrality(cellchat, slot.name = "netP") 
+      gg1 <- netAnalysis_signalingRole_scatter(cellchat)
+      ht1 <- netAnalysis_signalingRole_heatmap(cellchat, pattern = "outgoing")
+      ht2 <- netAnalysis_signalingRole_heatmap(cellchat, pattern = "incoming")
+      ht1 + ht2
+     
+      cellchat <- computeNetSimilarity(cellchat, type = "functional")
+      cellchat <- netEmbedding(cellchat, type = "functional")
+      cellchat <- netClustering(cellchat, type = "functional")
+      netVisual_embedding(cellchat, type = "functional", label.size = 3.5)
+    
+      sample_name <- gsub("\\.h5ad$", "", sample_name)
+      file_name <- paste0(sample_name, "_cellchat.rds")
+      saveRDS(cellchat, file = file_name)
+      cat(paste("Saved ", sample_name, " to ", file_name, "\n"))
+    }
+    
+    cellchat.tumor <- readRDS("5patients_primary_tumor_RNA_cellchat.rds")
+    cellchat.LN_pos <- readRDS("5patients_LN_pos_RNA_cellchat.rds")
+    cellchat.LN_neg <- readRDS("5patients_LN_neg_RNA_cellchat.rds")
+    cellchat.tumor <- updateCellChat(cellchat.tumor)
+    cellchat.LN_pos <- updateCellChat(cellchat.LN_pos)
+    cellchat.LN_neg <- updateCellChat(cellchat.LN_neg)
+    
+    group.new = levels(cellchat.LN_pos@idents)
+    cellchat.LN_neg <- liftCellChat(cellchat.LN_neg, group.new)
+    object.list <- list(LN_neg = cellchat.LN_neg, LN_pos = cellchat.LN_pos,tumor = cellchat.tumor)
+    cellchat <- mergeCellChat(object.list, add.names = names(object.list), cell.prefix = TRUE)
+    cellchat
+    
+    ### Figure S6A
+    gg1 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3),group.levels = c(1,2,3))+coord_cartesian(ylim = c(0, 3000))
+    gg2 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3),group.levels = c(1,2,3), measure = "weight")
+    gg1 + gg2
+    
+    ### Figure 4B
+    gg1 <- netVisual_heatmap(cellchat)
+    gg2 <- netVisual_heatmap(cellchat,comparison = c(3, 2) ,measure = "weight")
+    gg2
+    
+    ### Figure 4A
+    num.link <- sapply(object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
+    weight.MinMax <- c(min(num.link), max(num.link)) # control the dot size in the different datasets
+    gg <- list()
+    for (i in 1:length(object.list)) {
+      gg[[i]] <- netAnalysis_signalingRole_scatter(object.list[[i]], title = names(object.list)[i], weight.MinMax = weight.MinMax) +
+        coord_cartesian(xlim = c(0, 12),ylim = c(0, 10))
+    }
+    patchwork::wrap_plots(plots = gg)
+    
+    ### Figure S6B
+    gg1 <- rankNet(cellchat, mode = "comparison", comparison = c(2,3),stacked = T, do.stat = TRUE)
+    gg2 <- rankNet(cellchat, mode = "comparison", comparison = c(2,3),stacked = F, do.stat = TRUE)
+    gg1 + gg2
+    ### Figure S6C
+    gg1 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1),stacked = T, do.stat = TRUE)
+    gg2 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1),stacked = F, do.stat = TRUE)
+    gg1 + gg2
+    ### Figure S6D
+    gg1 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1,3),stacked = T, do.stat = TRUE)
+    gg2 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1,3),stacked = F, do.stat = TRUE)
+    gg1 + gg2
+    
+    ### Figure 4C
+    pathways.show <- c("SPP1") 
+    par(mfrow = c(1,2), xpd=TRUE)
+    ht <- list()
+    for (i in 1:length(object.list)) {
+      ht[[i]] <- netVisual_heatmap(object.list[[i]], signaling = pathways.show, color.heatmap = "Reds",title.name = paste(pathways.show, "signaling ",names(object.list)[i]) + netVis_heatmap(object.list[[i]],heatmap_colors_max = 0.16))
+    }
+    
+    ComplexHeatmap::draw(ht[[1]] +ht[[2]] + ht[[3]], ht_gap = unit(0.5, "cm"))
+    
+    ### Figure S6E
+    cellchat <- readRDS('5patients_primary_tumor_RNA_cellchat.rds')
+    pathways.show <- c("SPP1")
+    netVisual_bubble(cellchat, sources.use = 5, targets.use = 6, signaling = c("SPP1"), remove.isolate = FALSE)
+    
+    ### Figure S6F
+    cellchat <- readRDS('5patients_LN_pos_RNA_cellchat.rds')
+    pathways.show <- c("SPP1")
+    netVisual_bubble(cellchat, sources.use = 5, targets.use = 4, signaling = c("SPP1"), remove.isolate = FALSE)
 
 
+### Figure 4D
+    ### python
+    adata = adata[adata.obs.Tissues.isin(['Primary tumor','Metastatic lymph nodes'])].copy()
+    adata = adata[adata.obs.Cell_types_0.isin(['Macrophages'])].copy()
+    adata.layers['X']=adata.X
+    data=pd.concat([adata.to_df(layer="X"),adata.obs],axis=1)
+    data = data[['Tissues','SPP1']]
+    fig = sns.violinplot(data=data, x="Tissues", y="SPP1")
+    fig.figure.set_size_inches(4, 4)
+    from scipy.stats import ttest_ind
+    type1 = data[data['Tissues']=='Metastatic lymph nodes']
+    type2 = data[data['Tissues']=='Primary tumor']
+    res = ttest_ind(type1['SPP1'], type2['SPP1'])
+    print(res)
 
 
-
-
+### Figure 4E-F
+    ### python
+    adata = adata[adata.obs.Tissues.isin(['Primary tumor','Metastatic lymph nodes'])].copy()
+    adata.obs['Tissues'] = pd.Categorical(adata.obs['Tissues'], categories=["Metastatic lymph nodes","Primary tumor"], ordered=True)
+    indices = adata.obs.sort_values(['Cell_types_0', 'Tissues']).index
+    adata = adata[indices,:]
+    bdata = adata[adata.obs.Cell_types_0 == "Fibroblasts"].copy()
+    bdata
+    gs_list = ['GO_Biological_Process_2021']
+    import time
+    t1 = time.time()
+    res = gp.gsea(data=bdata.to_df().T, # row -> genes, column-> samples
+            gene_sets=gs_list,
+            cls=bdata.obs.Tissues,
+            permutation_num=1000,
+            permutation_type='phenotype',
+            outdir=None,
+            method='s2n', # signal_to_noise
+            threads= 200)
+    t2=time.time()
+    print(t2-t1)
+    res.res2d.to_csv('GSEA_LN_pos_vs_primary_Fibroblasts_GO_Biological_Process_2021.csv')
+    
+    ### Figure 4F
+    terms = res.res2d.Term
+    axs = res.plot(terms=terms[10],figsize = (6, 5.5))
+    plt.savefig('.pdf', format='pdf')
+    
+    ### Figure 4E
+    encodings = ['utf-8', 'gbk', 'iso-8859-1']
+    for encoding in encodings:
+        try:
+            data = pd.read_csv('GSEA_LN_pos_vs_primary_Fibroblasts_GO_Biological_Process_2021.csv', encoding=encoding).iloc[:20]
+            break
+        except UnicodeDecodeError:
+            continue
+    
+    data['Term'] = data['Term'].apply(lambda x: x.split('__')[-1].split('(')[0].strip().capitalize())
+    plt.figure(figsize=(3, 5))
+    sns.barplot(x="NES", y="Term", data=data, color='skyblue', linewidth=1)  
+    plt.xlim(2.5, 3.0)
+    plt.xlabel('NES')
+    plt.ylabel('')
+    plt.tick_params(axis='y', which='both', left=False, right=False, labelleft=False)  
+    plt.tight_layout()
+    for index, value in enumerate(data['Term']):
+        plt.text(3.05, index, value, ha='left', va='center', fontsize=14)
+    plt.savefig('plot.pdf')
+    plt.show()
 
 
 
