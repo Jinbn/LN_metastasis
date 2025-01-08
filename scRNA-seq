@@ -232,27 +232,59 @@ cellchat.LN_neg <- liftCellChat(cellchat.LN_neg, group.new)
 object.list <- list(LN_neg = cellchat.LN_neg, LN_pos = cellchat.LN_pos,tumor = cellchat.tumor)
 cellchat <- mergeCellChat(object.list, add.names = names(object.list), cell.prefix = TRUE)
 cellchat
+
 ### Figure S6A
 gg1 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3),group.levels = c(1,2,3))+coord_cartesian(ylim = c(0, 3000))
 gg2 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3),group.levels = c(1,2,3), measure = "weight")
 gg1 + gg2
 
+### Figure 4B
 gg1 <- netVisual_heatmap(cellchat)
-#> Do heatmap based on a merged object
 gg2 <- netVisual_heatmap(cellchat,comparison = c(3, 2) ,measure = "weight")
-#> Do heatmap based on a merged object
-gg1 + gg2
 gg2
 
+### Figure 4A
+num.link <- sapply(object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
+weight.MinMax <- c(min(num.link), max(num.link)) # control the dot size in the different datasets
+gg <- list()
+for (i in 1:length(object.list)) {
+  gg[[i]] <- netAnalysis_signalingRole_scatter(object.list[[i]], title = names(object.list)[i], weight.MinMax = weight.MinMax) +
+    coord_cartesian(xlim = c(0, 12),ylim = c(0, 10))
+}
+patchwork::wrap_plots(plots = gg)
 
+### Figure S6B
+gg1 <- rankNet(cellchat, mode = "comparison", comparison = c(2,3),stacked = T, do.stat = TRUE)
+gg2 <- rankNet(cellchat, mode = "comparison", comparison = c(2,3),stacked = F, do.stat = TRUE)
+gg1 + gg2
+### Figure S6C
+gg1 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1),stacked = T, do.stat = TRUE)
+gg2 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1),stacked = F, do.stat = TRUE)
+gg1 + gg2
+### Figure S6D
+gg1 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1,3),stacked = T, do.stat = TRUE)
+gg2 <- rankNet(cellchat, mode = "comparison", comparison = c(2,1,3),stacked = F, do.stat = TRUE)
+gg1 + gg2
 
+### Figure 4C
+pathways.show <- c("SPP1") 
+par(mfrow = c(1,2), xpd=TRUE)
+ht <- list()
+for (i in 1:length(object.list)) {
+  ht[[i]] <- netVisual_heatmap(object.list[[i]], signaling = pathways.show, color.heatmap = "Reds",title.name = paste(pathways.show, "signaling ",names(object.list)[i]) + netVis_heatmap(object.list[[i]],heatmap_colors_max = 0.16))
+}
 
+ComplexHeatmap::draw(ht[[1]] +ht[[2]] + ht[[3]], ht_gap = unit(0.5, "cm"))
 
+### Figure S6E
+cellchat <- readRDS('5patients_primary_tumor_RNA_cellchat.rds')
+pathways.show <- c("SPP1")
+netVisual_bubble(cellchat, sources.use = 5, targets.use = 6, signaling = c("SPP1"), remove.isolate = FALSE)
 
-
-
-
-
+### Figure S6F
+cellchat <- readRDS('5patients_LN_pos_RNA_cellchat.rds')
+pathways.show <- c("SPP1")
+netVisual_bubble(cellchat, sources.use = 5, targets.use = 4, signaling = c("SPP1"), remove.isolate = FALSE)
 
 
 
