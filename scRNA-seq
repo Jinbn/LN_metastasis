@@ -19,11 +19,13 @@ sc.settings.set_figure_params(dpi=300,dpi_save=600,facecolor='white')
 
 adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
 
+
 ### Figure 3A
     ### python
     sc.pl.umap(adata, color = ['Cell_types_0'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
     sc.pl.umap(adata, color = ['patient_ID'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
     sc.pl.umap(adata, color = ['Tissues'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
+
 
 ### Figure 3B
     ### python
@@ -41,6 +43,7 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     }
     adata.layers['scaled'] = sc.pp.scale(adata, copy=True).X
     sc.pl.matrixplot(adata, marker_genes_dict1, 'Cell_types_0', dendrogram=True,colorbar_title='mean z-score', layer='scaled', vmin=-2, vmax=2, cmap='RdBu_r',save='.pdf')
+
 
 ### Figure 3C
     ### python
@@ -63,6 +66,7 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     b=factor(df$Cell_types_0,levels = c('Fibroblasts','Endothelial cells','Malignant cells','Macrophages','DC','Plasma cells','Mast cells','pDC','B cells','T cells'))
     pp <- ggplot(df,aes(x=b))+geom_bar(width=0.9,fill = "steelblue", color ="steelblue")
     pp + theme_minimal()+coord_flip()
+
 
 ### Figure 3D
     ### python
@@ -97,6 +101,7 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     plt.savefig('.pdf', format='pdf')
     plt.show()
 
+
 ### Figure 3E
     ### python
     adata = adata[adata.obs.Cell_types_0.isin(['T cells'])].copy()
@@ -120,6 +125,7 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     p1 <- p+ylab ('Fraction of Cells')+scale_y_continuous(expand=c(0,0))+theme (axis.ticks.x = element_blank())
     p1+coord_flip()
 
+
 ### Figure 3F
     ### python
     adata = adata[adata.obs.Cell_types_0.isin(['T cells'])].copy()
@@ -129,12 +135,147 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     sc.pp.scale(adata)
     sc.tl.score_genes(adata, gene_list)
     sc.pl.violin(adata, ['score'], groupby='Tissues',ylabel='pTNI16 (cytotoxicity)',
-                 order = ["Non-metastatic lymph nodes", "Metastatic lymph nodes", "Primary tumor"],
-                 stripplot=False, inner='box',rotation=90,save='.pdf')
+                 order = ["Non-metastatic lymph nodes", "Metastatic lymph nodes", "Primary tumor"],stripplot=False, inner='box',rotation=90,save='.pdf')
 
 
 ### Figure 4A
+### python
+results_file1 = '5patients_LN_neg_RNA.h5ad'
+results_file2 = '5patients_LN_pos_RNA.h5ad'
+results_file3 = '5patients_primary_tumor_RNA.h5ad'
+
+adata1 = adata[adata.obs.Tissues.isin(['Non-metastatic lymph nodes'])].copy()
+adata2 = adata[adata.obs.Tissues.isin(['Metastatic lymph nodes'])].copy()
+adata3 = adata[adata.obs.Tissues.isin(['Primary tumor'])].copy()
+
+adata1.write(results_file1, compression="gzip")
+adata2.write(results_file2, compression="gzip")
+adata3.write(results_file3, compression="gzip")
+
 ### R
+library(dplyr)
+library(patchwork)
+library(ggplot2)
+library(igraph)
+library(svglite)
+library(ggalluvial)
+library(NMF)
+library(Seurat)
+library(CellChat)
+library(ComplexHeatmap)
+library(scRUtils)
+library(wordcloud)
+library(reticulate)
+library(Matrix)
+library(methods)
+library(circlize)
+library(viridis)
+
+options(stringsAsFactors = FALSE)
+setAs("dgRMatrix", to = "dgCMatrix", function(from){as(as(from, "CsparseMatrix"), "dgCMatrix")})
+ad <- import("anndata", convert = FALSE)
+sample_names <- c("5patients_primary_tumor_RNA.h5ad", "5patients_LN_pos_RNA.h5ad", "5patients_LN_neg_RNA.h5ad")
+
+for (sample_name in sample_names) 
+{
+  ad_object <- ad$read_h5ad(sample_name)
+  data.input <- t(py_to_r(ad_object$X))
+  rownames(data.input) <- rownames(py_to_r(ad_object$var))
+  colnames(data.input) <- rownames(py_to_r(ad_object$obs))
+  meta.data <- py_to_r(ad_object$obs)
+  meta <- meta.data
+  cellchat <- createCellChat(object = as(data.input, "dgCMatrix"), meta = meta, group.by = "Cell_types_0")
+  CellChatDB <- CellChatDB.human
+  showDatabaseCategory(CellChatDB)
+  dplyr::glimpse(CellChatDB$interaction)
+  CellChatDB.use <- CellChatDB
+  cellchat@DB <- CellChatDB.use
+
+  cellchat <- subsetData(cellchat)
+  future::plan("multiprocess", workers = 4)
+  cellchat <- identifyOverExpressedGenes(cellchat)
+  cellchat <- identifyOverExpressedInteractions(cellchat)
+  cellchat <- projectData(cellchat, PPI.human)
+
+  options(future.globals.maxSize= 1000*1024^2)
+  cellchat <- computeCommunProb(cellchat)
+  cellchat <- filterCommunication(cellchat, min.cells = 10)
+  cellchat <- computeCommunProbPathway(cellchat)
+  cellchat <- aggregateNet(cellchat)
+  
+  cellchat <- netAnalysis_computeCentrality(cellchat, slot.name = "netP") 
+  gg1 <- netAnalysis_signalingRole_scatter(cellchat)
+  ht1 <- netAnalysis_signalingRole_heatmap(cellchat, pattern = "outgoing")
+  ht2 <- netAnalysis_signalingRole_heatmap(cellchat, pattern = "incoming")
+  ht1 + ht2
+ 
+  cellchat <- computeNetSimilarity(cellchat, type = "functional")
+  cellchat <- netEmbedding(cellchat, type = "functional")
+  cellchat <- netClustering(cellchat, type = "functional")
+  netVisual_embedding(cellchat, type = "functional", label.size = 3.5)
+
+  sample_name <- gsub("\\.h5ad$", "", sample_name)
+  file_name <- paste0(sample_name, "_cellchat.rds")
+  saveRDS(cellchat, file = file_name)
+  cat(paste("Saved ", sample_name, " to ", file_name, "\n"))
+}
+
+cellchat.tumor <- readRDS("5patients_primary_tumor_RNA_cellchat.rds")
+cellchat.LN_pos <- readRDS("5patients_LN_pos_RNA_cellchat.rds")
+cellchat.LN_neg <- readRDS("5patients_LN_neg_RNA_cellchat.rds")
+cellchat.tumor <- updateCellChat(cellchat.tumor)
+cellchat.LN_pos <- updateCellChat(cellchat.LN_pos)
+cellchat.LN_neg <- updateCellChat(cellchat.LN_neg)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -160,154 +301,4 @@ sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['patient_ID'],l
 sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['Tissues'],legend_fontsize=8,size = 2,title='nLNs',legend_fontoutline=1,frameon=False)
 sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['Tissues'],legend_fontsize=8,size = 2,title='mLNs',legend_fontoutline=1,frameon=False)
 sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['Tissues'],legend_fontsize=8,size = 2,title='Primary tumor',legend_fontoutline=1,frameon=False)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
