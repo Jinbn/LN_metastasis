@@ -1,1 +1,169 @@
+### Figure 4G and Figure S10
+### python
+### spatial transcriptomics      Patient_065_mLN
+
+import numpy as np
+import cv2
+import scipy
+import skimage
+import skimage.morphology
+import time
+import skimage.feature
+import skimage.filters
+import concurrent.futures
+import matplotlib
+import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
+from Ensembl_converter import EnsemblConverter
+from PIL import Image
+import math
+import pandas as pd
+from scipy.sparse import csr_matrix
+import anndata as ad
+import scanpy as sc
+import seaborn as sns
+sc.logging.print_versions()
+sc.set_figure_params(dpi=300,dpi_save=600,facecolor="white", figsize=(8, 8),color_map ='Blues')
+sc.settings.verbosity = 3
+
+
+df1 = pd.read_csv('65_LN_pos_counts.txt', sep='\t')
+df1 = df1.set_index('GeneID')
+
+df2 = pd.read_csv('Ensembl_to_symbol_no_duplicates.csv')
+df2['gene_id'] = df2['gene_id'].astype(str)
+
+df1_filtered = df1[df1.index.isin(df2['gene_id'])]
+df1_filtered.index = df2.set_index('gene_id').loc[df1_filtered.index, 'gene_name']
+df = df1_filtered
+
+transposed_df = df.transpose()
+
+counts_sparse = csr_matrix(transposed_df.values, dtype=np.float32)
+adata = ad.AnnData(counts_sparse)
+adata
+
+adata.obs_names = transposed_df.index.tolist()
+adata.var_names = transposed_df.columns.tolist()
+numbers = np.arange(1, 51)
+array_row = np.repeat(numbers, 50)
+array_col = np.tile(numbers, (50, 1))
+array_col = array_col.flatten()
+adata.obs["array_row"] = pd.Categorical(array_row)
+adata.obs["array_col"] = pd.Categorical(array_col)
+
+image = Image.open('65-LN-pos-resize_2500.png')
+image_array = np.array(image)
+library_id = "65-pos"
+if 'spatial' not in adata.uns:
+    adata.uns['spatial'] = {}
+if library_id not in adata.uns['spatial']:
+    adata.uns['spatial'][library_id] = {}
+if 'images' not in adata.uns['spatial'][library_id]:
+    adata.uns['spatial'][library_id]['images'] = {}
+adata.uns['spatial'][library_id]['images']['hires'] = image_array
+print("Successfully stored the image array in adata.uns['spatial'][library_id]['images']['hires'].")
+
+
+height, width, _ = image_array.shape
+step_height = height // 50
+step_width = width // 50
+points = []
+for h in range(0, height, step_height):
+    for w in range(0, width, step_width):
+        points.append([w, h])
+points_array = np.array(points, dtype=np.int64)
+if len(points_array) < 2500:
+    remaining_points = 2500 - len(points_array)
+    for i in range(remaining_points):
+        points_array = np.append(points_array, [[0, 0]], axis=0)
+points_array = points_array[:2500]
+adata.obsm['spatial'] = points_array*8.5
+
+adata.uns['spatial'][library_id]['scalefactors'] = {
+    'tissue_hires_scalef': 0.1,
+    'fiducial_diameter_fullres': 1,
+    'spot_diameter_fullres': 3
+}
+
+
+adata.var_names_make_unique()
+adata.var["mt"] = adata.var_names.str.startswith("MT-")
+sc.pp.calculate_qc_metrics(adata, qc_vars=["mt"], inplace=True)
+fig, axs = plt.subplots(1, 4, figsize=(15, 4))
+sns.histplot(adata.obs["total_counts"], kde=False, ax=axs[0])
+sns.histplot(
+    adata.obs["total_counts"][adata.obs["total_counts"] > 2000],
+    kde=False,
+    bins=60,
+    ax=axs[1],
+)
+sns.histplot(adata.obs["n_genes_by_counts"], kde=False, bins=60, ax=axs[2])
+sns.histplot(
+    adata.obs["n_genes_by_counts"][adata.obs["n_genes_by_counts"] < 4000],
+    kde=False,
+    bins=60,
+    ax=axs[3],
+)
+
+sc.pp.filter_cells(adata, min_counts=750)
+sc.pp.filter_cells(adata, max_counts=35000)
+adata = adata[adata.obs["pct_counts_mt"] < 20].copy()
+print(f"#cells after MT filter: {adata.n_obs}")
+sc.pp.filter_genes(adata, min_cells=10)
+
+sc.pp.normalize_total(adata, inplace=True)
+sc.pp.log1p(adata)
+sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=2000)
+
+sc.pp.pca(adata)
+sc.pp.neighbors(adata)
+sc.tl.umap(adata)
+sc.tl.leiden(
+    adata, key_added="clusters", directed=False, n_iterations=2
+)
+
+adata.write_h5ad("65_LN_pos_counts.h5ad",compression="gzip")
+
+plt.rcParams["figure.figsize"] = (4, 4)
+sc.pl.umap(adata, color=["clusters"], wspace=0.4,save='.pdf)
+plt.rcParams["figure.figsize"] = (8, 8)
+sc.pl.spatial(adata, img_key=None,color=["clusters"],size=30, spot_size=12, ncols=2)
+ax = sc.pl.correlation_matrix(adata, "clusters", figsize=(5, 3.5))
+sc.tl.rank_genes_groups(adata, "clusters", method="wilcoxon")
+sc.pl.rank_genes_groups(adata, n_genes=25, sharey=False)
+
+Annotation2 = {
+    '0':'Lymphoid follicle',
+    '1':'Monocyte/Malignant cells',
+    '2':'Malignant cells',
+    '3':'Monocyte/Malignant cells',
+    '4':'Malignant cells/Fibroblasts',
+    '5':'B cells/Plasma cells/Fibroblasts',
+    '6':'Malignant cells',
+    '7':'SPP1 macrophages/Fibroblasts',
+}
+adata.obs ['Cell_types'] = adata.obs['clusters'].map(Annotation2).astype('category')
+
+plt.rcParams["figure.figsize"] = (4, 4)
+sc.pl.umap(adata, color=["Cell_types"], wspace=0.4)
+plt.rcParams["figure.figsize"] = (8, 8)
+sc.pl.spatial(adata, img_key=None,color=["Cell_types","CD68","SPP1","COL1A1",KRT17],size=30, spot_size=12, ncols=2)
+
+
+
+
+
+### spatial transcriptomics      Patient_065_primary tumor
+### "The primary tumor part only differs from the mLN part in the annotation2 line of code, with the rest being similar."
+Annotation2 = {
+    '0':'Monocyte/Malignant cells',
+    '1':'Fibroblasts/immune cells/Malignant cells',
+    '2':'Malignant cells',
+    '3':'Monocyte/Malignant cells',
+    '4':'Fibroblasts',
+    '5':'Fibroblasts',
+    '6':'Monocyte/Malignant cells',
+}
+adata.obs ['Cell_types'] = adata.obs['clusters'].map(Annotation2).astype('category')
 
