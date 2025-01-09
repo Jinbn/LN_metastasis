@@ -20,11 +20,36 @@ sc.settings.set_figure_params(dpi=300,dpi_save=600,facecolor='white')
 adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
 
 
-### Figure 3A
+### Figure 3A and Figure S4
+    Figure 3A
     ### python
     sc.pl.umap(adata, color = ['Cell_types_0'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
     sc.pl.umap(adata, color = ['patient_ID'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
     sc.pl.umap(adata, color = ['Tissues'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
+    
+    ### Figure S4
+    ### python
+    sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['Cell_types_0'],legend_fontsize=8,size = 2,title='nLNs',legend_fontoutline=1,frameon=False)
+    sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['Cell_types_0'],legend_fontsize=8,size = 2,title='mLNs',legend_fontoutline=1,frameon=False)
+    sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['Cell_types_0'],legend_fontsize=8,size = 2,title='Primary tumor',legend_fontoutline=1,frameon=False)
+    
+    sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['patient_ID'],legend_fontsize=8,size = 2,title='nLNs',legend_fontoutline=1,frameon=False)
+    sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['patient_ID'],legend_fontsize=8,size = 2,title='mLNs',legend_fontoutline=1,frameon=False)
+    sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['patient_ID'],legend_fontsize=8,size = 2,title='Primary tumor',legend_fontoutline=1,frameon=False)
+    
+    sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['Tissues'],legend_fontsize=8,size = 2,title='nLNs',legend_fontoutline=1,frameon=False)
+    sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['Tissues'],legend_fontsize=8,size = 2,title='mLNs',legend_fontoutline=1,frameon=False)
+    sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['Tissues'],legend_fontsize=8,size = 2,title='Primary tumor',legend_fontoutline=1,frameon=False)
+
+
+### Figure S5A
+    ### python
+    cnv.io.genomic_position_from_gtf("gencode.v42.annotation.gtf",adata)
+    cnv.tl.infercnv(
+        adata,
+        reference_key="Cell_types_0",
+        reference_cat=["B cells",'T cells',"DC","Macrophages","pDC",],window_size=250)
+    cnv.pl.chromosome_heatmap(adata, groupby="Cell_types_0",save='.pdf')
 
 
 ### Figure 3B
@@ -66,6 +91,19 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     b=factor(df$Cell_types_0,levels = c('Fibroblasts','Endothelial cells','Malignant cells','Macrophages','DC','Plasma cells','Mast cells','pDC','B cells','T cells'))
     pp <- ggplot(df,aes(x=b))+geom_bar(width=0.9,fill = "steelblue", color ="steelblue")
     pp + theme_minimal()+coord_flip()
+
+
+### Figure S5B
+    ### python
+    adata = adata[~adata.obs.Cell_types_0.isin(['Malignant cells'])].copy()
+    adata.obs.to_csv('Pt_LN_5patients_no_malignant_obs_3.csv')
+    ### R
+    library(ggplot2)
+    library(reshape2)
+    df <- read.csv('Pt_LN_5patients_no_malignant_obs_3.csv')
+    df1 <- table(df$Cell_types_0,df$patient_ID)
+    freq.table <-prop.table(x=df1,margin=2)
+    write.csv(freq.table, file = 'Pt_LN_5patients_no_malignant_obs_3_count.csv')
 
 
 ### Figure 3D
@@ -353,6 +391,99 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     plt.savefig('plot.pdf')
     plt.show()
 
+### Figure 5A-B
+    ### python
+    adata = adata[adata.obs.Tissues.isin(['Primary tumor','Metastatic lymph nodes'])].copy()
+    adata.obs['Tissues'] = pd.Categorical(adata.obs['Tissues'], categories=["Metastatic lymph nodes","Primary tumor"], ordered=True)
+    indices = adata.obs.sort_values(['Cell_types_0', 'Tissues']).index
+    adata = adata[indices,:]
+    bdata = adata[adata.obs.Cell_types_0 == "Macrophages"].copy()
+    bdata
+    gs_list = ['MSigDB_Hallmark_2020']
+    import time
+    t1 = time.time()
+    res = gp.gsea(data=bdata.to_df().T, # row -> genes, column-> samples
+            gene_sets=gs_list,
+            cls=bdata.obs.Tissues,
+            permutation_num=1000,
+            permutation_type='phenotype',
+            outdir=None,
+            method='s2n', # signal_to_noise
+            threads= 200)
+    t2=time.time()
+    print(t2-t1)
+    res.res2d.to_csv('GSEA_LN_pos_vs_primary_Macrophages_MSigDB_Hallmark_2020.csv')
+    
+    ### Figure 5A
+    terms = res.res2d.Term
+    axs = res.plot(terms=terms[12],figsize = (6, 5.5))
+    plt.savefig('.pdf', format='pdf')
+    
+    ### Figure 5B
+    data = pd.read_csv('GSEA_LN_pos_vs_primary_Macrophages_MSigDB_Hallmark_2020_NES_POSITIVE_TOP10.csv')
+    fig, ax = plt.subplots(figsize=(4, 4))
+    sns.barplot(x="NES", y="Term",width=0.8, data=data,palette='Set1')
+    plt.axis([0,3.5,-0.5,9.5])
+    plt.ylabel('')
+    ax.tick_params(axis='y',labelsize=10)
+    plt.savefig('plot.pdf')
+
+### Figure 5C
+    ### python
+    adata = adata[adata.obs.Tissues.isin(['Primary tumor','Metastatic lymph nodes'])].copy()
+    adata = adata[adata.obs.Cell_types_0.isin(["Macrophages"])].copy()
+    Annotation = {    
+        'Macro_SPP1':'SPP1_high',
+        'Macro_MKI67':'SPP1_high',
+        'Macro_KRT14':'SPP1_low',
+        'Macro_IL1B':'SPP1_low',
+        'Macro_C1QC':'SPP1_low',
+        'Macro_Ribo':'SPP1_low',
+        'Macro_CD3D':'SPP1_low',
+        'Macro_IFN':'SPP1_low',
+        'Macro_IGFBP7':'SPP1_low',
+        'Macro_COL1A2':'SPP1_low',
+    }
+    adata.obs ['SPP1'] = adata.obs['Cell_types'].map(Annotation).astype('category')
+    adata.obs['SPP1'] = pd.Categorical(adata.obs['SPP1'], categories=["SPP1_high","SPP1_low"], ordered=True)
+    indices = adata.obs.sort_values(['Cell_types_0', 'SPP1']).index
+    adata = adata[indices,:]
+    bdata = adata[adata.obs.Cell_types_0 == "Macrophages"].copy()
+    bdata
+    gs_list = ['GO_Biological_Process_2021', 'GO_Cellular_Component_2021', 'GO_Molecular_Function_2021','KEGG_2021_Human','MSigDB_Hallmark_2020']
+    import time
+    t1 = time.time()
+    res = gp.gsea(data=bdata.to_df().T, # row -> genes, column-> samples
+            gene_sets=gs_list,
+            cls=bdata.obs.SPP1,
+            permutation_num=1000,
+            permutation_type='phenotype',
+            outdir=None,
+            method='s2n', # signal_to_noise
+            threads= 200)
+    t2=time.time()
+    print(t2-t1)
+    terms = res.res2d.Term
+    axs = res.plot(terms=terms[1671],figsize = (6, 5.5))
+    plt.savefig('.pdf', format='pdf')
+
+
+### Figure 5D-E
+    ### python
+    import loompy as lp
+    adata = adata[adata.obs.Tissues.isin(['Primary tumor','Metastatic lymph nodes'])].copy()
+    adata = adata[adata.obs.Cell_types_0.isin(["Macrophages"])].copy()
+    row_attrs = {
+        "Gene": np.array(adata.var_names) ,
+    }
+    col_attrs = {
+        "CellID": np.array(adata.obs_names) ,
+        "nGene": np.array( np.sum(adata.X.transpose()>0 , axis=0)).flatten() ,
+        "nUMI": np.array( np.sum(adata.X.transpose() , axis=0)).flatten() ,
+    }
+    lp.create( 'Pyscenic_5_Patients_Macrophages_Primary_Tumor_vs_mLNs.loom', adata.X.transpose(), row_attrs, col_attrs)
+
+###LUNIX
 
 
 
@@ -363,44 +494,76 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### Figure S4
-### python
-sc.pl.umap(adata, color = ['Cell_types_0'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
-sc.pl.umap(adata, color = ['patient_ID'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
-sc.pl.umap(adata, color = ['Tissues'],legend_fontsize=8,size = 2,legend_fontoutline=1,frameon=False)
-
-sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['Cell_types_0'],legend_fontsize=8,size = 2,title='nLNs',legend_fontoutline=1,frameon=False)
-sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['Cell_types_0'],legend_fontsize=8,size = 2,title='mLNs',legend_fontoutline=1,frameon=False)
-sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['Cell_types_0'],legend_fontsize=8,size = 2,title='Primary tumor',legend_fontoutline=1,frameon=False)
-
-sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['patient_ID'],legend_fontsize=8,size = 2,title='nLNs',legend_fontoutline=1,frameon=False)
-sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['patient_ID'],legend_fontsize=8,size = 2,title='mLNs',legend_fontoutline=1,frameon=False)
-sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['patient_ID'],legend_fontsize=8,size = 2,title='Primary tumor',legend_fontoutline=1,frameon=False)
-
-sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['Tissues'],legend_fontsize=8,size = 2,title='nLNs',legend_fontoutline=1,frameon=False)
-sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['Tissues'],legend_fontsize=8,size = 2,title='mLNs',legend_fontoutline=1,frameon=False)
-sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['Tissues'],legend_fontsize=8,size = 2,title='Primary tumor',legend_fontoutline=1,frameon=False)
-
+    ### python
+    import os, glob, re, pickle
+    from functools import partial
+    from collections import OrderedDict
+    import operator as op
+    from cytoolz import compose
+    
+    import pandas as pd
+    import seaborn as sns
+    import numpy as np
+    import scanpy as sc
+    import anndata as ad
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    import loompy as lp
+    
+    import json
+    import base64
+    import zlib
+    
+    from pyscenic.export import export2loom, add_scenic_metadata
+    from pyscenic.utils import load_motifs
+    from pyscenic.transform import df2regulons
+    from pyscenic.aucell import aucell
+    from pyscenic.binarization import binarize
+    from pyscenic.rss import regulon_specificity_scores
+    from pyscenic.plotting import plot_binarization, plot_rss
+    from pyscenic.cli.utils import load_signatures
+    from adjustText import adjust_text
+    from IPython.display import HTML, display
+    
+    sc.settings.verbosity = 3   
+    sc.logging.print_header()
+    sc.settings.set_figure_params(dpi=600, facecolor='white',frameon=False,color_map ='Blues')
+    
+    
+    adata = adata[adata.obs.Tissues.isin(['Primary tumor','Metastatic lymph nodes'])].copy()
+    adata = adata[adata.obs.Cell_types_0.isin(["Macrophages"])].copy()
+    lf = lp.connect( 'Pyscenic_5_Patients_Macrophages_SCENIC.loom', mode='r', validate=False )
+    auc_mtx = pd.DataFrame( lf.ca.RegulonsAUC, index=lf.ca.CellID)
+    sig = load_signatures('reg.Pyscenic_5_Patients_Macrophages.csv')
+    adata = add_scenic_metadata(adata, auc_mtx, sig)
+    rss = regulon_specificity_scores(auc_mtx, adata.obs.Tissues)
+    
+    ### Figure 5D
+    cats = sorted(list(set(adata.obs['Tissues'])))
+    fig = plt.figure(figsize=(6,5))
+    for c,num in zip(cats, range(1,len(cats)+1)):
+        x=rss.T[c]
+        ax = fig.add_subplot(1,2,num)
+        plot_rss(rss, c, top_n=5, max_n=None, ax=ax)
+        ax.set_ylim( x.min()-(x.max()-x.min())*0.05 , x.max()+(x.max()-x.min())*0.05 )
+        for t in ax.texts:
+            t.set_fontsize(10)
+        ax.set_ylabel('')
+        ax.set_xlabel('')
+        adjust_text(ax.texts, autoalign='xy', ha='right', va='bottom', arrowprops=dict(arrowstyle='-',color='lightgrey'), precision=0.001 )
+     
+    fig.text(0.5, 0.0, 'Regulon', ha='center', va='center', size='x-large')
+    fig.text(0.00, 0.5, 'Regulon specificity score (RSS)', ha='center', va='center', rotation='vertical', size='x-large')
+    plt.tight_layout()
+    plt.rcParams.update({
+        'figure.autolayout': True,
+            'figure.titlesize': 'large' ,
+            'axes.labelsize': 'medium',
+            'axes.titlesize':'medium',
+            'xtick.labelsize':'medium',
+            'ytick.labelsize':'medium'
+            })
+    plt.savefig('plot.pdf')
+    
+    ### Figure 5E
+    sc.pl.violin(adata, ['Regulon(ATF4(+))'], groupby='Tissues', stripplot=False, inner='box') 
