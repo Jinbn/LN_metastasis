@@ -501,9 +501,6 @@ plt.show()
 ### The code for the remaining 7 plots is similar to the above code.
 
 
-
-
-
 ### Figure 4E-F
     ### python
     adata = adata[adata.obs.Tissues.isin(['Primary tumor','Metastatic lymph nodes'])].copy()
@@ -554,6 +551,34 @@ plt.show()
     plt.savefig('plot.pdf')
     plt.show()
 
+
+### Figure S11
+    ### R
+    library(phenoptr)
+    library(tidyverse)
+    
+    folder_path <- "ALOGI/"
+    files <- list.files(path = folder_path, pattern = "cell_seg_data.txt$", full.names = TRUE)
+    final_result <- data.frame()
+    for (file in files) {
+      cat("Processing:", file, "\n")
+      csd <- read_cell_seg_data(file)
+      csd <- csd %>% filter(Phenotype!='other')
+      csd <- csd %>% filter(Phenotype!='CD8+')
+      distances <- find_nearest_distance(csd)
+      csd_with_distance <- bind_cols(csd, distances)
+      result <- csd_with_distance %>% 
+        group_by(Phenotype) %>% 
+        select(Phenotype, starts_with('Distance to')) %>% 
+        summarize_all(~round(mean(.), 1))
+      result <- cbind(result, filename = basename(file))
+      final_result <- rbind(final_result, result)
+      cat("Finished processing:", file, "\n")
+    }
+    write.csv(final_result, file = "A_distance_final_result.csv", row.names = FALSE)
+    cat("All files processed. Combined result saved as 'final_result.csv'.\n")
+
+
 ### Figure 5A-B
     ### python
     adata = adata[adata.obs.Tissues.isin(['Primary tumor','Metastatic lymph nodes'])].copy()
@@ -590,6 +615,43 @@ plt.show()
     plt.ylabel('')
     ax.tick_params(axis='y',labelsize=10)
     plt.savefig('plot.pdf')
+
+
+### Figure S12
+    
+
+还差上游的内容
+
+
+
+
+
+
+### python
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import matplotlib.colors as mcolors
+    import os
+    
+    data = pd.read_excel("Macrophage_sub_NES.xlsx")
+    data['abs_NES'] = data['NES'].abs()
+    data = data.sort_values(by='abs_NES', ascending=False)
+    norm = mcolors.Normalize(vmin=data['P value'].min(), vmax=data['P value'].max())
+    cmap = plt.cm.coolwarm 
+    fig, ax = plt.subplots(figsize=(10, 6))
+    colors = [cmap(norm(p)) for p in data['P value']]
+    bars = ax.barh(data['sub_cells'], data['NES'], color=colors)
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array(data['P value'])
+    cbar = fig.colorbar(sm, ax=ax)
+    cbar.set_label('P value', fontsize=12)
+    ax.set_title('NES vs Sub Cells (Gradient by P value)', fontsize=16)
+    ax.set_xlabel('NES', fontsize=14)
+    ax.set_ylabel('Sub Cells', fontsize=14)
+    plt.tight_layout()
+    plt.savefig('.pdf')
+    plt.show()
+
 
 ### Figure 5C
     ### python
