@@ -393,13 +393,112 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
 
 
 ### Figure S8
+    ### python
+    ### Figure S8A
+    adata = adata[adata.obs.Cell_types_0.isin(['Macrophages'])].copy()
+    sc.tl.rank_genes_groups(adata, 'Cell_types', method='wilcoxon')
+    sc.pl.rank_genes_groups(adata, n_genes=25, sharey=False)
+    adata.layers["scaled"] = sc.pp.scale(adata, copy=True).X
+    sc.pl.rank_genes_groups_matrixplot(adata, n_genes=10, use_raw=False, vmin=-2.5, vmax=2.5, cmap='RdBu_r', layer='scaled',figsize=(6, 6),dendrogram=False,swap_axes=True)
+    
+    ### Figure S8B
+    adata = adata[adata.obs.Cell_types_0.isin(['Macrophages'])].copy()
+    cell_type_counts = adata.obs['Cell_types'].value_counts()
+    plt.figure(figsize=(8,8)) 
+    patches, texts, _ = plt.pie(cell_type_counts, labels=cell_type_counts.index, autopct='%1.1f%%', startangle=14)
+    plt.axis('equal')
+    
+    plt.legend(patches, cell_type_counts.index, loc='center left', bbox_to_anchor=(1, 0.5), fontsize='small', title='Cell Types')
+    plt.savefig('.pdf')
+    plt.show()
+    
+    ### Figure S8C
+    adata = adata[adata.obs.Cell_types_0.isin(['Macrophages'])].copy()
+    sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['Cell_types'],legend_fontsize=8,size = 23,title='mLNs',legend_fontoutline=1,frameon=False)
+    sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['Cell_types'],legend_fontsize=8,size = 23,title='Primary tumor',legend_fontoutline=1,frameon=False)
+    sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['Cell_types'],legend_fontsize=8,size = 23,title='nLNs',legend_fontoutline=1,frameon=False)
+    
+    ### Figure S8D
+    ### python
+    adata = adata[adata.obs.Cell_types_0.isin(['Macrophages'])].copy()
+    adata.obs.to_csv('Tissues_Macrophages_obs.csv')
+    ### R
+    library(ggplot2)
+    library(reshape2)
+    df <- read.csv('Tissues_Macrophages_obs.csv')
+    df1 <- table(df$Cell_types,df$patient_ID)
+    freq.table <-prop.table(x=df1,margin=2)
+    write.csv(freq.table, file = 'Tissues_Macrophages_obs_count.csv')
+    
+    
+    ### Figure S8E
+    ### python
+    adata = adata[adata.obs.Tissues.isin(['Primary tumor','Metastatic lymph nodes'])].copy()
+    adata = adata[adata.obs.Cell_types_0.isin(['Macrophages'])].copy()
+    adata.layers['X']=adata.X
+    data=pd.concat([adata.to_df(layer="X"),adata.obs],axis=1)
+    data = data[['Tissues','SPP1','Cell_types']]
+    
+    fig = sns.violinplot(data=data, x="Cell_types", y="SPP1",hue="Tissues")
+    plt.xticks(rotation=0)
+    fig.figure.set_size_inches(16, 4)
+    plt.savefig('.pdf')
+    
+    from scipy.stats import ttest_ind
+    samples = data['Cell_types'].unique()
+    for i in samples:
+        type1 = data[(data['Tissues'] == 'Metastatic lymph nodes') & (data['Cell_types_CCR'] == i)]
+        type2 = data[(data['Tissues'] == 'Primary tumor') & (data['Cell_types_CCR'] == i)]
+        res = ttest_ind(type1['SPP1'], type2['SPP1'])
+        print(f"T-test result for {i}: {res}")
+
+
+### Figure S9
+差上游的lunix的分析
+
+
+
+
+
+
 ### python
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib import cm
+from matplotlib.colors import Normalize
+import numpy as np
+import os
 
+file_path = 'Macro_IL1B/Macro_IL1B_rest_Hallmark_2023_2.csv'
+encodings = ['utf-8', 'gbk', 'iso-8859-1']
+for encoding in encodings:
+    try:
+        data = pd.read_csv(file_path, encoding=encoding).iloc[:20]
+        break
+    except UnicodeDecodeError:
+        continue
 
+if 'data' not in locals():
+    raise ValueError("Unable to read the file. Please check the encoding format or the file path for correctness.")
+data['Processed_Term'] = data['Term'].str.extract(r'gmt__(.*)$')[0].str.replace('_', ' ').str.title()
 
-
-
-
+fig, ax = plt.subplots(figsize=(8, 6))
+norm = Normalize(vmin=0, vmax=0.1)
+cmap = cm.get_cmap('coolwarm')
+colors = cmap(norm(data['NOM p-val']))
+bars = ax.barh(data['Processed_Term'], data['NES'], color=colors)
+sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+sm.set_array([])
+cbar = plt.colorbar(sm, ax=ax, shrink=0.8, aspect=20, pad=0.02)
+cbar.set_label('NOM p-val', rotation=270, labelpad=15)
+ax.set_xlim(left=0)
+ax.set_xlabel('NES')
+ax.set_ylabel('Term')
+ax.set_title('Macro_IL1B_rest_Hallmark_2023_2')
+plt.tight_layout()
+plt.savefig('Macro_IL1B_rest_Hallmark_2023_2.pdf')
+plt.show()
+### The code for the remaining 7 plots is similar to the above code.
 
 
 
