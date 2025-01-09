@@ -108,6 +108,7 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
 
 ### Figure 3D
     ### python
+    adata = adata[adata.obs.Cell_types_0.isin(['B cells','DC','Macrophages','Mast cells','Plasma cells','T cells','pDC'])].copy()
     df1 = pd.crosstab(adata.obs['Cell_types'], adata.obs['patient_ID'], margins=False)
     freq_table = df1.div(df1.sum(axis=0), axis=1)
     freq_table_df = pd.DataFrame(freq_table)
@@ -122,6 +123,39 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     freq_table_df['Primary_tumor'] = freq_table_df[Primary_tumor].mean(axis=1)
     df = freq_table_df.iloc[:, -3:]
     
+    normalized_df = np.log10(df.divide(df['Non_metastatic'], axis=0))
+    cax = plt.matshow(normalized_df, cmap='RdBu_r', vmin=-1.5, vmax=1.5)
+    circle_size_factor = 2
+    for i in range(df.shape[0]):
+        for j in range(df.shape[1]):
+            circle_size = df.iloc[i, j] * circle_size_factor
+            circle = plt.Circle((j, i), circle_size, color='black', fill=False)
+            plt.gca().add_patch(circle)
+            rect = plt.Rectangle((j - 0.5, i - 0.5), 1, 1, color='white', linewidth=1, fill=False)
+            plt.gca().add_patch(rect)
+    plt.xticks(range(df.shape[1]), df.columns, rotation=45)
+    plt.yticks(range(df.shape[0]), df.index)
+    plt.gca().xaxis.tick_top()
+    plt.colorbar(cax, shrink=0.5)
+    plt.savefig('.pdf', format='pdf')
+    plt.show()
+
+### Figure S5C
+    ### python
+    adata = adata[adata.obs.Cell_types_0.isin(['B cells','DC','Macrophages','Mast cells','Plasma cells','T cells','pDC'])].copy()
+    df1 = pd.crosstab(adata.obs['Cell_types_0'], adata.obs['patient_ID'], margins=False)
+    freq_table = df1.div(df1.sum(axis=0), axis=1)
+    freq_table_df = pd.DataFrame(freq_table)
+    Non_metastatic = ['Pt_59_LN_negative_RNA', 'Pt_63_LN_negative_RNA', 'Pt_64_LN_negative_RNA', 'Pt_65_LN_negative_RNA','Pt_68_LN_negative_RNA']
+    freq_table_df['Non_metastatic'] = freq_table_df[Non_metastatic].mean(axis=1)
+    
+    Metastatic = ['Pt_41_LN_positive_RNA', 'Pt_49_LN_positive_RNA', 'Pt_59_LN_positive_RNA','Pt_64_LN_positive_RNA','Pt_68_LN_positive_RNA']
+    freq_table_df['Metastatic'] = freq_table_df[Metastatic].mean(axis=1)
+    
+    Primary_tumor = ['Pt_41_post_tumor_RNA', 'Pt_49_post_tumor_RNA', 'Pt_59_post_tumor_RNA','Pt_64_post_tumor_RNA','Pt_68_post_tumor_RNA']
+    freq_table_df['Primary_tumor'] = freq_table_df[Primary_tumor].mean(axis=1)
+    df = freq_table_df.iloc[:, -3:]
+
     normalized_df = np.log10(df.divide(df['Non_metastatic'], axis=0))
     cax = plt.matshow(normalized_df, cmap='RdBu_r', vmin=-1.5, vmax=1.5)
     circle_size_factor = 2
@@ -164,7 +198,7 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     p1+coord_flip()
 
 
-### Figure 3F
+### Figure 3F and Figure S5D-E
     ### python
     adata = adata[adata.obs.Cell_types_0.isin(['T cells'])].copy()
     adata = adata[adata.obs.Cell_types_1.isin(['CD8+ T cells'])].copy()
@@ -172,8 +206,17 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
                 'CEBPD','LGALS1','SAMSN1','CCL4','AC092580.4','ACP5','LITAF','PTMS','APOBEC3G','TNFRSF18','SH3BGRL3','RPS26','LDHA','CKLF']
     sc.pp.scale(adata)
     sc.tl.score_genes(adata, gene_list)
+    ### Figure 3F
     sc.pl.violin(adata, ['score'], groupby='Tissues',ylabel='pTNI16 (cytotoxicity)',
                  order = ["Non-metastatic lymph nodes", "Metastatic lymph nodes", "Primary tumor"],stripplot=False, inner='box',rotation=90,save='.pdf')
+   
+    ### Figure S5D
+    sc.pl.violin(adata, ['score'], groupby='Cell_types',ylabel='pTNI16 (cytotoxicity)',stripplot=False, inner='box',rotation=90,save='.pdf')
+
+    ### Figure S5E
+    sc.pl.umap(adata[adata.obs.Tissues == "Non-metastatic lymph nodes"], color = ['score'],legend_fontsize=8,size = 30,title='Non-metastatic lymph nodes',legend_fontoutline=1,frameon=False,cmap="coolwarm",vmin=-1,vmax=2)
+    sc.pl.umap(adata[adata.obs.Tissues == "Metastatic lymph nodes"], color = ['score'],legend_fontsize=8,size = 30,title='Metastatic lymph nodes',legend_fontoutline=1,frameon=False,cmap="coolwarm",vmin=-1,vmax=2)
+    sc.pl.umap(adata[adata.obs.Tissues == "Primary tumor"], color = ['score'],legend_fontsize=8,size = 30,title='Primary tumor',legend_fontoutline=1,frameon=False,cmap="coolwarm", vmin=-1,vmax=2)
 
 
 ### Figure 4A-C and Figure S6
@@ -325,13 +368,15 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     netVisual_bubble(cellchat, sources.use = 5, targets.use = 4, signaling = c("SPP1"), remove.isolate = FALSE)
 
 
-### Figure 4D
+### Figure 4D and Figure S7
     ### python
     adata = adata[adata.obs.Tissues.isin(['Primary tumor','Metastatic lymph nodes'])].copy()
     adata = adata[adata.obs.Cell_types_0.isin(['Macrophages'])].copy()
     adata.layers['X']=adata.X
     data=pd.concat([adata.to_df(layer="X"),adata.obs],axis=1)
-    data = data[['Tissues','SPP1']]
+    data = data[['Tissues','SPP1', 'patient_ID']]
+
+    ### Figure 4D
     fig = sns.violinplot(data=data, x="Tissues", y="SPP1")
     fig.figure.set_size_inches(4, 4)
     from scipy.stats import ttest_ind
@@ -339,6 +384,25 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
     type2 = data[data['Tissues']=='Primary tumor']
     res = ttest_ind(type1['SPP1'], type2['SPP1'])
     print(res)
+
+    ### Figure S7
+    avg_score_df = data.groupby(['Tissues', 'patient_ID'])["SPP1"].mean().reset_index()
+    avg_score_df = avg_score_df.dropna(subset=['SPP1'])
+    # 保存结果到csv文件
+    avg_score_df.to_csv('macrophages_5_primary vs mLNs_SPP1.csv', index=False)
+
+
+### Figure S8
+### python
+
+
+
+
+
+
+
+
+
 
 
 ### Figure 4E-F
