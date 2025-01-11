@@ -618,16 +618,28 @@ plt.show()
 
 
 ### Figure S12
-    
+    ### python
+    adata = adata[adata.obs.Cell_types_0.isin(["Macrophages"])].copy()
+    adata = adata[adata.obs.Tissues.isin(['Primary tumor','Metastatic lymph nodes'])].copy()
+    indices = adata.obs.sort_values(['Cell_types', 'Tissues']).index
+    adata = adata[indices,:]
+    bdata = adata[adata.obs.Cell_types_CCR == "Macro_IL1B"].copy()
+    gs_list_all = ['MSigDB_Hallmark_2020']
+    import time
+    t1 = time.time()
+    res = gp.gsea(data=bdata.to_df().T, # row -> genes, column-> samples
+            gene_sets=gs_list_all,
+            cls=bdata.obs.Tissues,
+            permutation_num=1000,
+            permutation_type='phenotype',
+            outdir=None,
+            method='s2n', # signal_to_noise
+            threads= 200)
+    t2=time.time()
+    print(t2-t1)
+    res.res2d.to_csv('GSEA_UPR_LN_pos_vs_primary_Macro_IL1B.csv')
+    ### The code for the remaining 9 cell types is similar to the above code.
 
-还差上游的内容
-
-
-
-
-
-
-### python
     import pandas as pd
     import matplotlib.pyplot as plt
     import matplotlib.colors as mcolors
