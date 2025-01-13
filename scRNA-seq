@@ -454,51 +454,90 @@ adata = sc.read_h5ad('Pt_all_samples_RNA_CCR.h5ad')
 
 
 ### Figure S9
-差上游的lunix的分析
-
-
-
-
-
-
-### python
-import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib import cm
-from matplotlib.colors import Normalize
-import numpy as np
-import os
-
-file_path = 'Macro_IL1B/Macro_IL1B_rest_Hallmark_2023_2.csv'
-encodings = ['utf-8', 'gbk', 'iso-8859-1']
-for encoding in encodings:
-    try:
-        data = pd.read_csv(file_path, encoding=encoding).iloc[:20]
-        break
-    except UnicodeDecodeError:
-        continue
-
-if 'data' not in locals():
-    raise ValueError("Unable to read the file. Please check the encoding format or the file path for correctness.")
-data['Processed_Term'] = data['Term'].str.extract(r'gmt__(.*)$')[0].str.replace('_', ' ').str.title()
-
-fig, ax = plt.subplots(figsize=(8, 6))
-norm = Normalize(vmin=0, vmax=0.1)
-cmap = cm.get_cmap('coolwarm')
-colors = cmap(norm(data['NOM p-val']))
-bars = ax.barh(data['Processed_Term'], data['NES'], color=colors)
-sm = cm.ScalarMappable(cmap=cmap, norm=norm)
-sm.set_array([])
-cbar = plt.colorbar(sm, ax=ax, shrink=0.8, aspect=20, pad=0.02)
-cbar.set_label('NOM p-val', rotation=270, labelpad=15)
-ax.set_xlim(left=0)
-ax.set_xlabel('NES')
-ax.set_ylabel('Term')
-ax.set_title('Macro_IL1B_rest_Hallmark_2023_2')
-plt.tight_layout()
-plt.savefig('Macro_IL1B_rest_Hallmark_2023_2.pdf')
-plt.show()
-### The code for the remaining 7 plots is similar to the above code.
+    adata = adata[adata.obs.Cell_types_0.isin(['Macrophages'])].copy()
+        Annotation = {    
+            'Macro_SPP1':'rest',
+            'Macro_MKI67':'rest',
+            'Macro_KRT14':'rest',
+            'Macro_IL1B':'Macro_IL1B',
+            'Macro_C1QC':'rest',
+            'Macro_Ribo':'rest',
+            'Macro_CD3D':'rest',
+            'Macro_IFN':'rest',
+            'Macro_IGFBP7':'rest',
+            'Macro_COL1A2':'rest',
+        }
+    adata.obs['IL1B'] = adata.obs['Cell_types'].map(Annotation).astype('category')
+    
+    Hallmark_2023_2 = ["h.all.v2023.2.Hs.symbols.gmt"]
+    GO_BP_2023_2 = ["c5.go.bp.v2023.2.Hs.symbols.gmt"]
+    gs_list_all = [Hallmark_2023_2, GO_BP_2023_2]
+    
+    adata.obs['IL1B'] = pd.Categorical(adata.obs['IL1B'], categories=["Macro_IL1B","rest"], ordered=True)
+    indices = adata.obs.sort_values(['Cell_types_0', 'IL1B']).index
+    adata = adata[indices,:]
+    
+    save_folder = "Macro_IL1B"
+    unique_celltypes = ['Macrophages']
+    for cell_type in unique_celltypes:
+        bdata = adata[adata.obs['Cell_types_0'] == cell_type]
+        for gs_list in gs_list_all:
+    
+            import time
+            t1 = time.time()
+            res = gp.gsea(data=bdata.to_df().T, # row -> genes, column-> samples
+                    gene_sets=gs_list,
+                    cls=bdata.obs.IL1B,
+                    permutation_num=1000,
+                    permutation_type='phenotype',
+                    outdir=None,
+                    method='s2n', # signal_to_noise
+                    threads= 200)
+            t2=time.time()
+            print(t2-t1)
+            
+            gs_list_name = [k for k, v in globals().items() if v is gs_list][0]
+            filename1 = f"Macro_IL1B_rest_{gs_list_name}.csv"
+            save_path1 = os.path.join(save_folder, filename1)
+            res.res2d.to_csv(save_path1)
+    
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from matplotlib import cm
+    from matplotlib.colors import Normalize
+    import numpy as np
+    import os
+    
+    file_path = 'Macro_IL1B/Macro_IL1B_rest_Hallmark_2023_2.csv'
+    encodings = ['utf-8', 'gbk', 'iso-8859-1']
+    for encoding in encodings:
+        try:
+            data = pd.read_csv(file_path, encoding=encoding).iloc[:20]
+            break
+        except UnicodeDecodeError:
+            continue
+    
+    if 'data' not in locals():
+        raise ValueError("Unable to read the file. Please check the encoding format or the file path for correctness.")
+    data['Processed_Term'] = data['Term'].str.extract(r'gmt__(.*)$')[0].str.replace('_', ' ').str.title()
+    
+    fig, ax = plt.subplots(figsize=(8, 6))
+    norm = Normalize(vmin=0, vmax=0.1)
+    cmap = cm.get_cmap('coolwarm')
+    colors = cmap(norm(data['NOM p-val']))
+    bars = ax.barh(data['Processed_Term'], data['NES'], color=colors)
+    sm = cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = plt.colorbar(sm, ax=ax, shrink=0.8, aspect=20, pad=0.02)
+    cbar.set_label('NOM p-val', rotation=270, labelpad=15)
+    ax.set_xlim(left=0)
+    ax.set_xlabel('NES')
+    ax.set_ylabel('Term')
+    ax.set_title('Macro_IL1B_rest_Hallmark_2023_2')
+    plt.tight_layout()
+    plt.savefig('Macro_IL1B_rest_Hallmark_2023_2.pdf')
+    plt.show()
+    ### The code for the remaining 7 plots is similar to the above code.
 
 
 ### Figure 4E-F
@@ -720,16 +759,10 @@ plt.show()
     }
     lp.create( 'Pyscenic_5_Patients_Macrophages_Primary_Tumor_vs_mLNs.loom', adata.X.transpose(), row_attrs, col_attrs)
 
-###LUNIX
-
-
-
-
-
-
-
-
-
+    ###LUNIX
+    pyscenic grn --num_workers 20 --output adj.Pyscenic_5_Patients_Macrophages.tsv --method grnboost2 Pyscenic_5_Patients_Macrophages_Primary_Tumor_vs_mLNs.loom /home/lyc/data2/LJB/pyscenic/allTFs_hg38.txt
+    pyscenic ctx adj.Pyscenic_5_Patients_Macrophages.tsv /home/lyc/data2/LJB/pyscenic/hg38_10kbp_up_10kbp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather --annotations_fname /home/lyc/data2/LJB/pyscenic/motifs-v10nr_clust-nr.hgnc-m0.001-o0.0.tbl --expression_mtx_fname Pyscenic_5_Patients_Macrophages_Primary_Tumor_vs_mLNs.loom --mode "dask_multiprocessing" --output reg.Pyscenic_5_Patients_Macrophages.csv --num_workers 20 --mask_dropouts
+    pyscenic aucell Pyscenic_5_Patients_Macrophages_Primary_Tumor_vs_mLNs.loom reg.Pyscenic_5_Patients_Macrophages.csv --output Pyscenic_5_Patients_Macrophages_SCENIC.loom --num_workers 20 
 
     ### python
     import os, glob, re, pickle
